@@ -2318,6 +2318,70 @@ body.launch-session-active .global-narrator {
   }
 }
 
+
+/* ============================================================
+   v31 — Prevent typed prologue words from breaking in mobile
+   The typewriter still reveals each character, but wraps only between words.
+   ============================================================ */
+.typing-word {
+  display: inline-block;
+  white-space: nowrap;
+}
+
+
+/* ============================================================
+   v32 — Final closing slide mobile fit across ES / EN / PT
+   Keeps each closing line intact and prevents side clipping.
+   ============================================================ */
+@media (max-width: 820px) {
+  .final-punch-scene .scene-sticky {
+    padding-left: 18px !important;
+    padding-right: 18px !important;
+    padding-top: max(132px, calc(env(safe-area-inset-top) + 112px)) !important;
+    padding-bottom: max(58px, calc(env(safe-area-inset-bottom) + 42px)) !important;
+  }
+
+  .closing-only {
+    width: 100% !important;
+    max-width: 100% !important;
+    font-size: clamp(30px, 8.8vw, 42px) !important;
+    line-height: 1.02 !important;
+    letter-spacing: -0.04em !important;
+    gap: 0.08em !important;
+  }
+
+  .closing-only .closing-line {
+    display: block !important;
+    width: max-content !important;
+    max-width: 100% !important;
+    white-space: nowrap !important;
+    word-break: keep-all !important;
+    overflow-wrap: normal !important;
+  }
+
+  .final-punch-scene .scene-panel {
+    width: 100% !important;
+    max-width: 100% !important;
+    overflow: visible !important;
+  }
+
+  .launch-scroll-arrow {
+    margin-top: 24px !important;
+  }
+}
+
+@media (max-width: 390px) {
+  .final-punch-scene .scene-sticky {
+    padding-left: 16px !important;
+    padding-right: 16px !important;
+  }
+
+  .closing-only {
+    font-size: clamp(28px, 8.4vw, 36px) !important;
+    line-height: 1.03 !important;
+  }
+}
+
 </style>
 </head>
 <body class="prologue-active">
@@ -2592,28 +2656,69 @@ function playTypeTick() {
 function typeLine(el, text, speed = 42) {
   return new Promise(resolve => {
     el.textContent = '';
-    let i = 0;
+    const tokens = text.match(/\S+|\s+/g) || [];
+    let tokenIndex = 0;
+    let charIndex = 0;
+    let activeWord = null;
+
     const caret = document.createElement('span');
     caret.className = 'prologue-caret';
     el.appendChild(caret);
 
+    function beginNextToken() {
+      if (tokenIndex >= tokens.length) {
+        caret.remove();
+        resolve();
+        return;
+      }
+
+      const token = tokens[tokenIndex];
+
+      if (/^\s+$/.test(token)) {
+        // Keep a normal text-space so wrapping can happen only between words,
+        // never in the middle of a word on narrow smartphone screens.
+        el.insertBefore(document.createTextNode(' '), caret);
+        tokenIndex += 1;
+        charIndex = 0;
+        activeWord = null;
+        setTimeout(step, speed * 0.45);
+        return;
+      }
+
+      activeWord = document.createElement('span');
+      activeWord.className = 'typing-word';
+      el.insertBefore(activeWord, caret);
+      charIndex = 0;
+      step();
+    }
+
     function step() {
-      if (i < text.length) {
-        const char = text[i];
+      if (!activeWord) {
+        beginNextToken();
+        return;
+      }
+
+      const token = tokens[tokenIndex];
+
+      if (charIndex < token.length) {
+        const char = token[charIndex];
         const span = document.createElement('span');
         span.className = 'fog-char';
-        span.textContent = char === ' ' ? '\u00A0' : char;
-        el.insertBefore(span, caret);
-        i += 1;
+        span.textContent = char;
+        activeWord.appendChild(span);
+        charIndex += 1;
         playTypeTick();
         const variable = char === ',' || char === '.' ? speed * 4.2 : speed + Math.random() * 22;
         setTimeout(step, variable);
       } else {
-        caret.remove();
-        resolve();
+        tokenIndex += 1;
+        charIndex = 0;
+        activeWord = null;
+        beginNextToken();
       }
     }
-    step();
+
+    beginNextToken();
   });
 }
 
